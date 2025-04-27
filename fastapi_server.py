@@ -23,7 +23,7 @@ from app.config import settings
 from app import get_db
 
 # Create the FastAPI application
-app = FastAPI(title="OSINT Microagent", description="OSINT information gathering tool")
+app = FastAPI(title="Bishdom IntelSleuth", description="OSINT information gathering tool")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
