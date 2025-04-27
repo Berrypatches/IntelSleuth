@@ -9,3 +9,4 @@ python-whois
 sqlalchemy
 pydantic-settings
 validators
+email-validator
