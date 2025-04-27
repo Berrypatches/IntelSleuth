@@ -13,3 +13,9 @@ app = flask_app
 
 # For FastAPI use
 api_app = fastapi_app
+if __name__ == "__main__":
+    import os
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 8000))  # get the PORT from Render
+    uvicorn.run("main:api_app", host="0.0.0.0", port=port, reload=False)
