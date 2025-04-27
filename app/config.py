@@ -9,10 +9,12 @@ class Settings(BaseSettings):
     Application settings
     """
     # Database settings
-    DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+    DATABASE_URL: str = os.environ.get("DATABASE_URL", "sqlite:///./intel_sleuth.db")
+
     
     # API keys
     IPINFO_API_KEY: str = os.environ.get("IPINFO_API_KEY", "")
+    IP2LOCATION_API_KEY: str = os.environ.get("IP2LOCATION_API_KEY", "")
     HUNTER_API_KEY: str = os.environ.get("HUNTER_API_KEY", "")
     HIBP_API_KEY: str = os.environ.get("HIBP_API_KEY", "")
     
