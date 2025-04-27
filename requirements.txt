@@ -12,3 +12,4 @@ validators
 email-validator
 beautifulsoup4
 python-dotenv
+trafilatura
