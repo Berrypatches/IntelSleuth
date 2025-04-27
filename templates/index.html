@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Terminal - Bishdom Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div>
+            <svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+                <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="28" fill="#333">
+                    <tspan x="50%" dy="-10">Bishdom</tspan>
+                    <tspan x="50%" dy="30" font-size="18">OSINT Terminal</tspan>
+                </text>
+                <path d="M60,15 L70,5 L75,5 L78,8 L80,5 L85,5 L90,10" stroke="#333" stroke-width="2" fill="none"/>
+                <circle cx="95" cy="10" r="5" fill="#333"/>
+            </svg>
+        </div>
+        <div class="header-title">OSINT Terminal</div>
+        <div class="header-subtitle">Hover over each section to see what it will do in the final version.</div>
+    </header>
+
+    <main>
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <a href="#" class="nav-tab">🔍 Research Bay</a>
+            <a href="#" class="nav-tab active">✍️ Writer's Wing</a>
+            <a href="#" class="nav-tab">🎬 Creator Studio</a>
+            <a href="#" class="nav-tab">⭐ OSINT Terminal</a>
+        </div>
+
+        <!-- Search Container -->
+        <div class="search-container">
+            <h2 class="cyber-heading typing-effect">OSINT Intelligence Search</h2>
+            
+            {% if error %}
+            <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <form id="search-form" class="search-form" action="/search" method="post">
+                <div class="search-row">
+                    <input type="text" name="query" class="search-input" placeholder="Enter name, email, phone, username, domain, or IP..." required>
+                    <button type="submit" class="search-button">Search</button>
+                </div>
+                <div class="search-row">
+                    <input type="text" name="webhook_url" class="webhook-input" placeholder="Webhook URL (optional for n8n integration)">
+                </div>
+            </form>
+        </div>
+
+        <!-- Terminal Animation -->
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <div class="terminal-title">OSINT Terminal</div>
+                <div class="terminal-controls">
+                    <span class="terminal-minimize"></span>
+                    <span class="terminal-maximize"></span>
+                    <span class="terminal-close"></span>
+                </div>
+            </div>
+            <div id="terminal-content" class="terminal-content">
+                <!-- Terminal content will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Features Section -->
+        <div class="cyber-panel">
+            <div class="cyber-panel-header">
+                <h3 class="cyber-panel-title">OSINT Features</h3>
+                <div class="cyber-panel-controls">
+                    <div class="cyber-panel-control"></div>
+                    <div class="cyber-panel-control"></div>
+                    <div class="cyber-panel-control"></div>
+                </div>
+            </div>
+            
+            <div class="cyber-grid">
+                <div class="cyber-card">
+                    <div class="cyber-card-header">Search Engines</div>
+                    <p>Scrapes data from DuckDuckGo, Bing, and other public search engines.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+                
+                <div class="cyber-card">
+                    <div class="cyber-card-header">API Integration</div>
+                    <p>Connects to IPinfo.io, Hunter.io, HaveIBeenPwned, and more with free-tier APIs.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+                
+                <div class="cyber-card">
+                    <div class="cyber-card-header">WHOIS Lookup</div>
+                    <p>Performs domain and IP WHOIS lookups to reveal registration details.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+                
+                <div class="cyber-card">
+                    <div class="cyber-card-header">Smart Filtering</div>
+                    <p>Filters out ads, duplicates, and irrelevant content from search results.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+                
+                <div class="cyber-card">
+                    <div class="cyber-card-header">Categorization</div>
+                    <p>Organizes findings into emails, phone numbers, social links, addresses, and more.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+                
+                <div class="cyber-card">
+                    <div class="cyber-card-header">Webhook Export</div>
+                    <p>Sends results to configurable webhook endpoints for n8n integration.</p>
+                    <div class="cyber-progress">
+                        <div class="cyber-progress-bar" data-width="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Instructions -->
+        <div class="cyber-box">
+            <h3 class="cyber-heading">Usage Instructions</h3>
+            <ol>
+                <li>Enter a query in the search box above (name, email, phone, username, domain, or IP)</li>
+                <li>Optionally provide a webhook URL for n8n integration</li>
+                <li>Click Search to begin the OSINT collection process</li>
+                <li>Review the categorized results and executive summary</li>
+                <li>Export results for further analysis or integration</li>
+            </ol>
+            <p><strong>Note:</strong> All searches are performed using public information and free API tiers. The quality of results may vary based on the availability of public data.</p>
+        </div>
+        
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text">Gathering intelligence... Please wait.</div>
+        </div>
+    </main>
+
+    <footer>
+        <p>OSINT Microagent &copy; 2023 Bishdom Portal | Use responsibly and ethically</p>
+    </footer>
+
+    <script src="{{ url_for('static', path='js/main.js') }}"></script>
+</body>
+</html>

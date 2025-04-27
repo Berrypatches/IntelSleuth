@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Results - Bishdom Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div>
+            <svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+                <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="28" fill="#333">
+                    <tspan x="50%" dy="-10">Bishdom</tspan>
+                    <tspan x="50%" dy="30" font-size="18">OSINT Terminal</tspan>
+                </text>
+                <path d="M60,15 L70,5 L75,5 L78,8 L80,5 L85,5 L90,10" stroke="#333" stroke-width="2" fill="none"/>
+                <circle cx="95" cy="10" r="5" fill="#333"/>
+            </svg>
+        </div>
+        <div class="header-title">OSINT Results</div>
+        <div class="header-subtitle">Intelligence report for: {{ query }}</div>
+    </header>
+
+    <main>
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <a href="#" class="nav-tab">🔍 Research Bay</a>
+            <a href="#" class="nav-tab">✍️ Writer's Wing</a>
+            <a href="#" class="nav-tab">🎬 Creator Studio</a>
+            <a href="#" class="nav-tab active">⭐ OSINT Terminal</a>
+        </div>
+
+        <!-- Hidden data for JavaScript -->
+        <div id="query-data" style="display: none;">{{ query }}</div>
+        <div id="results-data" style="display: none;">{{ results|tojson }}</div>
+
+        <!-- Search Again Button -->
+        <div style="margin-bottom: 20px;">
+            <a href="/" class="cyber-button">
+                <i data-feather="arrow-left"></i> New Search
+            </a>
+            <button id="export-results" class="cyber-button" style="float: right;">
+                <i data-feather="download"></i> Export Results
+            </button>
+        </div>
+
+        <!-- Executive Summary -->
+        <div class="results-container">
+            <div class="results-header">
+                <h2>Executive Summary</h2>
+                {% if webhook_url %}
+                <div>
+                    Webhook: <span id="webhook-status" data-pending="true" class="badge badge-info">Pending</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="results-body">
+                <div class="summary-container">
+                    {% if results.summary %}
+                        {{ results.summary | replace('\n', '<br>') | replace('## ', '<h3>') | replace('# ', '<h2>') | safe }}
+                    {% else %}
+                        <p>No significant findings to summarize.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <div class="terminal-title">OSINT Terminal - {{ query }}</div>
+                <div class="terminal-controls">
+                    <span class="terminal-minimize"></span>
+                    <span class="terminal-maximize"></span>
+                    <span class="terminal-close"></span>
+                </div>
+            </div>
+            <div id="results-terminal" class="terminal-content">
+                <!-- Terminal content will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Detailed Results -->
+        <div class="results-container">
+            <div class="results-header">
+                <h2>Detailed Intelligence Report</h2>
+                <div>Query Type: <span class="cyber-badge">{{ query_type }}</span></div>
+            </div>
+            <div class="results-body">
+                <!-- Results Tabs -->
+                <div class="results-tabs">
+                    {% if results.emails %}
+                    <div class="results-tab active" data-target="emails-tab">
+                        <i data-feather="mail"></i> Emails ({{ results.emails|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.phone_numbers %}
+                    <div class="results-tab{% if not results.emails %} active{% endif %}" data-target="phones-tab">
+                        <i data-feather="phone"></i> Phone Numbers ({{ results.phone_numbers|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.social_links %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers %} active{% endif %}" data-target="social-tab">
+                        <i data-feather="share-2"></i> Social Profiles ({{ results.social_links|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.domains %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links %} active{% endif %}" data-target="domains-tab">
+                        <i data-feather="globe"></i> Domains ({{ results.domains|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.ips %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains %} active{% endif %}" data-target="ips-tab">
+                        <i data-feather="server"></i> IP Addresses ({{ results.ips|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.business_info %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips %} active{% endif %}" data-target="business-tab">
+                        <i data-feather="briefcase"></i> Business Info ({{ results.business_info|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.addresses %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info %} active{% endif %}" data-target="addresses-tab">
+                        <i data-feather="map-pin"></i> Addresses ({{ results.addresses|length }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if results.leaks %}
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info and not results.addresses %} active{% endif %}" data-target="leaks-tab">
+                        <i data-feather="alert-circle"></i> Data Breaches ({{ results.leaks|length }})
+                    </div>
+                    {% endif %}
+                    
+                    <div class="results-tab{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info and not results.addresses and not results.leaks %} active{% endif %}" data-target="raw-tab">
+                        <i data-feather="code"></i> Raw Results
+                    </div>
+                </div>
+
+                <!-- Tab Contents -->
+                {% if results.emails %}
+                <div id="emails-tab" class="tab-content active">
+                    <div class="result-cards">
+                        {% for email in results.emails %}
+                        <div class="result-card">
+                            <h3><i data-feather="mail"></i> Email</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ email.email }}</div>
+                                <div class="result-item-details">
+                                    {% if email.name %}Name: {{ email.name }}<br>{% endif %}
+                                    {% if email.position %}Position: {{ email.position }}<br>{% endif %}
+                                    {% if email.confidence %}Confidence: {{ email.confidence }}%<br>{% endif %}
+                                    {% if email.score %}Score: {{ email.score }}<br>{% endif %}
+                                    {% if email.status %}Status: {{ email.status }}<br>{% endif %}
+                                    {% if email.relation %}Relation: {{ email.relation }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ email.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.phone_numbers %}
+                <div id="phones-tab" class="tab-content{% if not results.emails %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for phone in results.phone_numbers %}
+                        <div class="result-card">
+                            <h3><i data-feather="phone"></i> Phone Number</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ phone.phone }}</div>
+                                <div class="result-item-details">
+                                    {% if phone.context %}Context: {{ phone.context }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ phone.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.social_links %}
+                <div id="social-tab" class="tab-content{% if not results.emails and not results.phone_numbers %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for social in results.social_links %}
+                        <div class="result-card">
+                            <h3><i data-feather="share-2"></i> Social Profile</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">
+                                    {% if "facebook.com" in social.url %}
+                                    <i data-feather="facebook"></i> Facebook
+                                    {% elif "twitter.com" in social.url %}
+                                    <i data-feather="twitter"></i> Twitter
+                                    {% elif "linkedin.com" in social.url %}
+                                    <i data-feather="linkedin"></i> LinkedIn
+                                    {% elif "instagram.com" in social.url %}
+                                    <i data-feather="instagram"></i> Instagram
+                                    {% elif "github.com" in social.url %}
+                                    <i data-feather="github"></i> GitHub
+                                    {% else %}
+                                    <i data-feather="link"></i> Website
+                                    {% endif %}
+                                </div>
+                                <div class="result-item-details">
+                                    <a href="{{ social.url }}" target="_blank" rel="noopener noreferrer">{{ social.url }}</a><br>
+                                    {% if social.context %}Context: {{ social.context }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ social.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.domains %}
+                <div id="domains-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for domain in results.domains %}
+                        <div class="result-card">
+                            <h3><i data-feather="globe"></i> Domain</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">
+                                    {% if domain.domain is string %}
+                                        {{ domain.domain }}
+                                    {% elif domain.domain is iterable and domain.domain is not mapping %}
+                                        {{ domain.domain[0] if domain.domain|length > 0 else "Unknown domain" }}
+                                    {% else %}
+                                        Unknown domain
+                                    {% endif %}
+                                </div>
+                                <div class="result-item-details">
+                                    {% if domain.registrar %}Registrar: {{ domain.registrar }}<br>{% endif %}
+                                    {% if domain.creation_date %}
+                                        {% if domain.creation_date is string %}
+                                            Created: {{ domain.creation_date }}<br>
+                                        {% elif domain.creation_date is iterable and domain.creation_date is not mapping %}
+                                            Created: {{ domain.creation_date[0] if domain.creation_date|length > 0 else "Unknown" }}<br>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% if domain.expiration_date %}
+                                        {% if domain.expiration_date is string %}
+                                            Expires: {{ domain.expiration_date }}<br>
+                                        {% elif domain.expiration_date is iterable and domain.expiration_date is not mapping %}
+                                            Expires: {{ domain.expiration_date[0] if domain.expiration_date|length > 0 else "Unknown" }}<br>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% if domain.organization %}Organization: {{ domain.organization }}<br>{% endif %}
+                                    {% if domain.name_servers and domain.name_servers is iterable and domain.name_servers is not mapping %}
+                                        Name Servers: 
+                                        {% for ns in domain.name_servers %}
+                                            {{ ns }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                        <br>
+                                    {% endif %}
+                                    <span class="source-badge">Source: {{ domain.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.ips %}
+                <div id="ips-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for ip in results.ips %}
+                        <div class="result-card">
+                            <h3><i data-feather="server"></i> IP Address</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ ip.ip }}</div>
+                                <div class="result-item-details">
+                                    {% if ip.hostname %}Hostname: {{ ip.hostname }}<br>{% endif %}
+                                    {% if ip.city and ip.country %}Location: {{ ip.city }}, {{ ip.country }}<br>{% endif %}
+                                    {% if ip.org %}Organization: {{ ip.org }}<br>{% endif %}
+                                    {% if ip.postal %}Postal: {{ ip.postal }}<br>{% endif %}
+                                    {% if ip.timezone %}Timezone: {{ ip.timezone }}<br>{% endif %}
+                                    {% if ip.loc %}Coordinates: {{ ip.loc }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ ip.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.business_info %}
+                <div id="business-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for business in results.business_info %}
+                        <div class="result-card">
+                            <h3><i data-feather="briefcase"></i> Business Information</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ business.name }}</div>
+                                <div class="result-item-details">
+                                    {% if business.domain %}Domain: {{ business.domain }}<br>{% endif %}
+                                    {% if business.email_pattern %}Email Pattern: {{ business.email_pattern }}<br>{% endif %}
+                                    {% if business.type %}Type: {{ business.type }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ business.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.addresses %}
+                <div id="addresses-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for address in results.addresses %}
+                        <div class="result-card">
+                            <h3><i data-feather="map-pin"></i> Address</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ address.address }}</div>
+                                <div class="result-item-details">
+                                    {% if address.context %}Context: {{ address.context }}<br>{% endif %}
+                                    <span class="source-badge">Source: {{ address.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if results.leaks %}
+                <div id="leaks-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info and not results.addresses %} active{% endif %}">
+                    <div class="result-cards">
+                        {% for leak in results.leaks %}
+                        <div class="result-card">
+                            <h3><i data-feather="alert-circle"></i> Data Breach</h3>
+                            <div class="result-item">
+                                <div class="result-item-title">{{ leak.name }}</div>
+                                <div class="result-item-details">
+                                    {% if leak.title %}Title: {{ leak.title }}<br>{% endif %}
+                                    {% if leak.domain %}Domain: {{ leak.domain }}<br>{% endif %}
+                                    {% if leak.breach_date %}Date: {{ leak.breach_date }}<br>{% endif %}
+                                    {% if leak.description %}Description: {{ leak.description }}<br>{% endif %}
+                                    {% if leak.data_classes %}
+                                        Data Classes: 
+                                        {% for data_class in leak.data_classes %}
+                                            {{ data_class }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                        <br>
+                                    {% endif %}
+                                    <span class="source-badge">Source: {{ leak.source }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div id="raw-tab" class="tab-content{% if not results.emails and not results.phone_numbers and not results.social_links and not results.domains and not results.ips and not results.business_info and not results.addresses and not results.leaks %} active{% endif %}">
+                    <div class="cyber-box">
+                        <h3 class="cyber-heading">Raw Intelligence Data</h3>
+                        <p>This tab shows all raw intelligence data collected during the search. Use the tabs above to view categorized information.</p>
+                        
+                        {% if results.raw_results %}
+                        <div class="result-cards">
+                            {% for result in results.raw_results %}
+                            <div class="result-card">
+                                <h3><i data-feather="file-text"></i> Raw Result</h3>
+                                <div class="result-item">
+                                    <div class="result-item-title">{{ result.title }}</div>
+                                    <div class="result-item-details">
+                                        <a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">{{ result.url }}</a><br>
+                                        {% if result.snippet %}Snippet: {{ result.snippet }}<br>{% endif %}
+                                        <span class="source-badge">Source: {{ result.source }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p>No raw results available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>OSINT Microagent &copy; 2023 Bishdom Portal | Use responsibly and ethically</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        // Initialize Feather icons
+        document.addEventListener('DOMContentLoaded', function() {
+            feather.replace();
+        });
+    </script>
+    <script src="{{ url_for('static', path='js/main.js') }}"></script>
+    <script src="{{ url_for('static', path='js/results.js') }}"></script>
+</body>
+</html>
