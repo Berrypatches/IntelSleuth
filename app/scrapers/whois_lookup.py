@@ -1,19 +1,11 @@
+"""
+OSINT Microagent - WHOIS Lookup
+"""
 import logging
-import asyncio
-from typing import Dict, Any, Optional
 import socket
-
-# Try different whois packages
-try:
-    import python_whois as whois
-    has_whois = True
-except ImportError:
-    try:
-        import whois
-        has_whois = True
-    except ImportError:
-        has_whois = False
-        logging.warning("python-whois package not available, using limited WHOIS functionality")
+import whois
+import subprocess
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,114 +14,189 @@ class WhoisLookup:
     Handles WHOIS lookups for domains and IP addresses
     """
     
-    @staticmethod
-    async def lookup_domain(domain: str) -> Dict[str, Any]:
+    async def perform_lookup(self, query_data: Dict[str, Any], sources: Dict[str, bool]) -> Dict[str, Any]:
         """
-        Performs a WHOIS lookup for a domain
+        Performs a WHOIS lookup for the specified domain or IP
         
         Args:
-            domain: The domain to lookup
+            query_data: Parsed query data
+            sources: Dictionary of enabled sources
             
         Returns:
-            Dictionary containing WHOIS information
+            Dictionary with lookup results
         """
-        logger.debug(f"Performing WHOIS lookup for domain: {domain}")
+        if not sources.get("whois", False):
+            return {}
         
-        # Initialize with basic information
-        result = {
-            "domain": domain,
-            "source": "whois",
-            "note": "Basic information only (limited WHOIS access)"
-        }
+        result = {}
         
-        # Only attempt to use whois if the module is available
-        if has_whois:
-            try:
-                # Run whois lookup in a separate thread to not block the event loop
-                loop = asyncio.get_event_loop()
-                
-                # Call whois.whois
-                w = await loop.run_in_executor(None, lambda: whois.whois(domain))
-                
-                # Process the whois response if successful
-                if w:
-                    # Process common whois fields
-                    for field in ["domain_name", "registrar", "whois_server", "creation_date", 
-                              "updated_date", "expiration_date", "name_servers", 
-                              "status", "emails", "dnssec"]:
-                        if hasattr(w, field) and getattr(w, field):
-                            value = getattr(w, field)
-                            
-                            # Convert datetime objects to strings
-                            if isinstance(value, (list, tuple)):
-                                str_values = []
-                                for item in value:
-                                    if hasattr(item, "strftime"):
-                                        str_values.append(item.strftime("%Y-%m-%d %H:%M:%S"))
-                                    else:
-                                        str_values.append(str(item))
-                                result[field] = str_values
-                            elif hasattr(value, "strftime"):
-                                result[field] = value.strftime("%Y-%m-%d %H:%M:%S")
-                            else:
-                                result[field] = str(value)
-            except Exception as e:
-                logger.warning(f"WHOIS lookup error: {e}")
-        else:
-            logger.warning("WHOIS lookup skipped as python-whois is not available")
-            
+        # Domain lookup
+        if "domain" in query_data:
+            domain_info = await self._lookup_domain(query_data["domain"])
+            if domain_info:
+                result["domain"] = domain_info
+        
+        # IP lookup
+        if "ip" in query_data:
+            ip_info = await self._lookup_ip(query_data["ip"])
+            if ip_info:
+                result["ip"] = ip_info
+        
         return result
     
-    @staticmethod
-    async def lookup_ip(ip: str) -> Dict[str, Any]:
+    async def _lookup_domain(self, domain: str) -> Optional[Dict[str, Any]]:
         """
-        Performs a basic lookup for an IP address (not full WHOIS)
+        Performs a WHOIS lookup for a domain name
+        
+        Args:
+            domain: The domain name to lookup
+            
+        Returns:
+            Dictionary with domain WHOIS information or None if lookup fails
+        """
+        try:
+            # Try using python-whois library
+            w = whois.whois(domain)
+            
+            # Extract relevant information
+            result = {
+                "domain_name": w.domain_name,
+                "registrar": w.registrar,
+                "creation_date": w.creation_date,
+                "expiration_date": w.expiration_date,
+                "updated_date": w.updated_date,
+                "name_servers": w.name_servers,
+                "status": w.status,
+                "emails": w.emails,
+                "dnssec": w.dnssec,
+                "org": w.org
+            }
+            
+            # Filter out None values
+            result = {k: v for k, v in result.items() if v is not None}
+            
+            return result
+        except Exception as primary_error:
+            logger.warning(f"Primary WHOIS lookup for {domain} failed: {str(primary_error)}")
+            
+            # Fallback to command-line whois tool
+            try:
+                whois_output = subprocess.check_output(["whois", domain], 
+                                                      universal_newlines=True,
+                                                      stderr=subprocess.STDOUT,
+                                                      timeout=10)
+                
+                # Parse the raw whois output
+                result = self._parse_raw_whois(whois_output)
+                return result
+            except Exception as fallback_error:
+                logger.error(f"Fallback WHOIS lookup for {domain} failed: {str(fallback_error)}")
+                return {"error": "WHOIS lookup failed", "domain": domain}
+    
+    async def _lookup_ip(self, ip: str) -> Optional[Dict[str, Any]]:
+        """
+        Performs a WHOIS lookup for an IP address
         
         Args:
             ip: The IP address to lookup
             
         Returns:
-            Dictionary containing basic IP information
+            Dictionary with IP WHOIS information or None if lookup fails
         """
-        logger.debug(f"Performing lookup for IP: {ip}")
-        
         try:
-            # Try to get hostname for the IP
-            loop = asyncio.get_event_loop()
-            hostname = await loop.run_in_executor(None, lambda: socket.getfqdn(ip))
+            # Try getting hostname
+            hostname = socket.getfqdn(ip)
+            if hostname != ip:  # If not the same as the IP
+                host_info = {"hostname": hostname}
+            else:
+                host_info = {}
             
-            result = {
-                "ip": ip,
-                "hostname": hostname if hostname != ip else "No hostname found",
-                "source": "whois"
-            }
-            
-            return result
-            
+            # Use command-line whois tool for IP (better than python-whois for IPs)
+            try:
+                whois_output = subprocess.check_output(["whois", ip], 
+                                                      universal_newlines=True,
+                                                      stderr=subprocess.STDOUT,
+                                                      timeout=10)
+                
+                # Parse the raw whois output
+                whois_info = self._parse_raw_whois(whois_output)
+                
+                # Combine results
+                result = {**host_info, **whois_info}
+                return result
+            except Exception as fallback_error:
+                logger.error(f"WHOIS lookup for IP {ip} failed: {str(fallback_error)}")
+                if host_info:  # If we at least got hostname info
+                    return host_info
+                return {"error": "WHOIS lookup failed", "ip": ip}
         except Exception as e:
-            logger.error(f"Error in IP lookup for {ip}: {e}")
-            return {"error": str(e), "source": "whois"}
+            logger.error(f"IP lookup for {ip} failed: {str(e)}")
+            return {"error": "IP lookup failed", "ip": ip}
     
-    async def perform_lookup(self, query_data: Dict[str, Any], sources: Dict[str, bool]) -> Dict[str, Any]:
+    def _parse_raw_whois(self, raw_output: str) -> Dict[str, Any]:
         """
-        Performs WHOIS lookup based on query data
+        Parses raw WHOIS output into a structured format
         
         Args:
-            query_data: Parsed query data from InputHandler
-            sources: Dictionary of source names and boolean indicators
+            raw_output: Raw WHOIS output text
             
         Returns:
-            Dictionary with WHOIS information
+            Dictionary with structured WHOIS information
         """
-        if not sources.get("whois", False):
-            return {}
+        result = {"raw_text": raw_output}
         
-        if "domain" in query_data:
-            result = await self.lookup_domain(query_data["domain"])
-            return {"whois": result}
+        # Extract common fields
+        lines = raw_output.splitlines()
         
-        elif "ip" in query_data:
-            result = await self.lookup_ip(query_data["ip"])
-            return {"whois": result}
+        # Known important fields
+        field_mapping = {
+            "domain name": "domain_name",
+            "registrar": "registrar",
+            "created": "creation_date",
+            "creation date": "creation_date",
+            "registrar registration expiration date": "expiration_date",
+            "updated date": "updated_date",
+            "name server": "name_servers",
+            "status": "status",
+            "registrant name": "registrant_name",
+            "registrant organization": "registrant_organization",
+            "registrant email": "registrant_email",
+            "admin name": "admin_name",
+            "admin email": "admin_email",
+            "tech name": "tech_name",
+            "tech email": "tech_email",
+            "netname": "netname",
+            "netrange": "netrange",
+            "organization": "organization",
+            "org": "organization",
+            "cidr": "cidr",
+            "country": "country"
+        }
         
-        return {}
+        extracted_data = {}
+        name_servers = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line or ":" not in line:
+                continue
+                
+            parts = line.split(":", 1)
+            key = parts[0].strip().lower()
+            value = parts[1].strip()
+            
+            # Map the field if it's in our mapping
+            if key in field_mapping:
+                mapped_key = field_mapping[key]
+                
+                # Handle name servers separately to collect them into a list
+                if mapped_key == "name_servers":
+                    name_servers.append(value)
+                    extracted_data[mapped_key] = name_servers
+                else:
+                    extracted_data[mapped_key] = value
+        
+        # Add extracted data to result
+        result.update(extracted_data)
+        
+        return result

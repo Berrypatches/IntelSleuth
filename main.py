@@ -1,23 +1,15 @@
 """
 OSINT Microagent - Main Entry Point
-This serves as the entry point for Gunicorn. It uses Flask to redirect to the FastAPI server.
+This file provides access to both the FastAPI app
+and the Flask redirector app
 """
-import os
-from flask import Flask, redirect, request
+# Import the FastAPI application
+from fastapi_server import app as fastapi_app
+# Import the Flask application
+from flask_app import app as flask_app
 
-# Create a simple Flask app that redirects to port 8000
-app = Flask(__name__)
+# For Gunicorn WSGI
+app = flask_app
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def catch_all(path):
-    # Get the domain from request
-    host = request.headers.get('Host', 'localhost:5000')
-    domain = host.split(':')[0]
-    
-    # Forward to the same path on port 8000
-    return redirect(f"http://{domain}:8000/{path}")
-
-if __name__ == "__main__":
-    # This module is imported by gunicorn_app.py, so we don't need to run anything here
-    pass
+# For FastAPI use
+api_app = fastapi_app

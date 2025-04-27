@@ -1,10 +1,13 @@
+"""
+OSINT Microagent - Input Handler
+"""
 import re
-import validators
-from typing import Dict, List, Optional, Tuple, Any
+import ipaddress
 from enum import Enum
-import logging
+from typing import Tuple, Dict, Any
 
-logger = logging.getLogger(__name__)
+import validators
+from email_validator import validate_email, EmailNotValidError
 
 class InputType(str, Enum):
     NAME = "name"
@@ -34,49 +37,48 @@ class InputHandler:
             - InputType enum identifying the type of input
             - Dictionary with parsed components of the input
         """
-        if not query or not isinstance(query, str):
-            return False, InputType.UNKNOWN, {}
-        
+        # Normalize query
         query = query.strip()
         
-        # Check for email
-        if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', query):
-            logger.debug(f"Input identified as email: {query}")
-            username, domain = query.split('@')
-            return True, InputType.EMAIL, {
-                "email": query,
-                "username": username,
-                "domain": domain
-            }
+        if not query:
+            return False, InputType.UNKNOWN, {}
         
-        # Check for domain
+        # Check if it's an email
+        if "@" in query and "." in query:
+            try:
+                valid = validate_email(query)
+                return True, InputType.EMAIL, {"email": valid.normalized, "domain": valid.domain}
+            except EmailNotValidError:
+                pass  # Not an email, continue checking other types
+        
+        # Check if it's an IP address
+        try:
+            ip = ipaddress.ip_address(query)
+            return True, InputType.IP, {"ip": str(ip), "ip_version": ip.version}
+        except ValueError:
+            pass  # Not an IP, continue checking other types
+        
+        # Check if it's a domain
         if validators.domain(query):
-            logger.debug(f"Input identified as domain: {query}")
             return True, InputType.DOMAIN, {"domain": query}
         
-        # Check for IP address
-        if validators.ipv4(query) or validators.ipv6(query):
-            logger.debug(f"Input identified as IP address: {query}")
-            return True, InputType.IP, {"ip": query}
+        # Check if it's a phone number (simple validation)
+        phone_pattern = r"^\+?[0-9]{8,15}$"
+        if re.match(phone_pattern, query.replace(" ", "").replace("-", "")):
+            cleaned_phone = re.sub(r"[^\d+]", "", query)
+            return True, InputType.PHONE, {"phone": cleaned_phone}
         
-        # Check for phone number (basic check, can be improved)
-        if re.match(r'^\+?[0-9\s\-\(\)]{7,20}$', query):
-            # Normalize phone number
-            normalized = re.sub(r'[^0-9+]', '', query)
-            logger.debug(f"Input identified as phone number: {normalized}")
-            return True, InputType.PHONE, {"phone": normalized}
-        
-        # Check for username (basic check)
-        if re.match(r'^[a-zA-Z0-9_\.]{3,30}$', query):
-            logger.debug(f"Input identified as username: {query}")
+        # Check if it's a username (simple validation)
+        username_pattern = r"^[\w\.-]{3,30}$"
+        if re.match(username_pattern, query) and "." not in query:
             return True, InputType.USERNAME, {"username": query}
         
-        # If no specific format is detected, treat as a name or general search term
-        if len(query.split()) >= 1:
-            logger.debug(f"Input identified as name or search term: {query}")
+        # If it has spaces, assume it's a name
+        if " " in query and all(x.isalpha() or x.isspace() for x in query):
             return True, InputType.NAME, {"name": query}
         
-        return False, InputType.UNKNOWN, {}
+        # Default to treating it as a search query
+        return True, InputType.UNKNOWN, {"search_query": query}
     
     @staticmethod
     def parse_query(query: str) -> Dict[str, Any]:
@@ -92,23 +94,15 @@ class InputHandler:
         is_valid, input_type, parsed_data = InputHandler.validate_and_identify(query)
         
         if not is_valid:
-            return {
-                "valid": False,
-                "query": query,
-                "type": InputType.UNKNOWN,
-                "data": {}
-            }
+            return {}
         
-        # Determine which sources to use based on input type
-        sources_to_use = InputHandler._get_sources_for_type(input_type)
-        
-        return {
-            "valid": True,
-            "query": query,
-            "type": input_type,
-            "data": parsed_data,
-            "sources": sources_to_use
+        result = {
+            "raw_query": query,
+            "query_type": input_type.value,
+            **parsed_data
         }
+        
+        return result
     
     @staticmethod
     def _get_sources_for_type(input_type: InputType) -> Dict[str, bool]:
@@ -121,48 +115,59 @@ class InputHandler:
         Returns:
             Dictionary with source names as keys and boolean indicators as values
         """
-        # Base configuration - enable all by default
+        # Default sources (all disabled)
         sources = {
+            "whois": False,
             "duckduckgo": False,
             "bing": False,
-            "whois": False,
+            "social_search": False,
             "ipinfo": False,
             "hunter": False,
             "haveibeenpwned": False
         }
         
-        # Customize based on input type
-        if input_type == InputType.NAME:
-            sources.update({"duckduckgo": True, "bing": True})
-        
-        elif input_type == InputType.EMAIL:
+        # Enable sources based on input type
+        if input_type == InputType.EMAIL:
             sources.update({
-                "duckduckgo": True, 
-                "hunter": True, 
+                "duckduckgo": True,
+                "bing": True,
+                "hunter": True,
                 "haveibeenpwned": True
             })
-        
-        elif input_type == InputType.PHONE:
-            sources.update({"duckduckgo": True, "bing": True})
-        
-        elif input_type == InputType.USERNAME:
-            sources.update({
-                "duckduckgo": True, 
-                "bing": True, 
-                "haveibeenpwned": True
-            })
-        
         elif input_type == InputType.DOMAIN:
             sources.update({
-                "duckduckgo": True, 
-                "whois": True, 
+                "whois": True,
+                "duckduckgo": True,
+                "bing": True,
                 "hunter": True
             })
-        
         elif input_type == InputType.IP:
             sources.update({
-                "whois": True, 
+                "whois": True,
                 "ipinfo": True
+            })
+        elif input_type == InputType.USERNAME:
+            sources.update({
+                "duckduckgo": True,
+                "bing": True,
+                "social_search": True,
+                "haveibeenpwned": True
+            })
+        elif input_type == InputType.NAME:
+            sources.update({
+                "duckduckgo": True,
+                "bing": True,
+                "social_search": True
+            })
+        elif input_type == InputType.PHONE:
+            sources.update({
+                "duckduckgo": True,
+                "bing": True
+            })
+        else:  # UNKNOWN
+            sources.update({
+                "duckduckgo": True,
+                "bing": True
             })
         
         return sources

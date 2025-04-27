@@ -1,7 +1,9 @@
+"""
+OSINT Microagent - API Sources
+"""
 import logging
+from typing import Dict, Any, List, Optional
 import httpx
-import asyncio
-from typing import Dict, List, Any, Optional
 import json
 
 from app.config import settings
@@ -14,10 +16,15 @@ class APISources:
     """
     
     def __init__(self):
+        """
+        Initialize the API sources
+        """
         self.ipinfo_api_key = settings.IPINFO_API_KEY
         self.hunter_api_key = settings.HUNTER_API_KEY
         self.hibp_api_key = settings.HIBP_API_KEY
-        self.timeout = settings.TIMEOUT
+        self.headers = {
+            "User-Agent": settings.USER_AGENT
+        }
     
     async def fetch_ipinfo(self, ip: str) -> Dict[str, Any]:
         """
@@ -30,28 +37,26 @@ class APISources:
             Dictionary containing IP information
         """
         if not self.ipinfo_api_key:
-            logger.warning("IPinfo API key not set")
-            return {"error": "API key not configured"}
-        
-        url = f"https://ipinfo.io/{ip}?token={self.ipinfo_api_key}"
+            logger.warning("IPinfo API key not set. Skipping IPinfo lookup.")
+            return {"error": "IPinfo API key not set"}
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            url = f"https://ipinfo.io/{ip}/json?token={self.ipinfo_api_key}"
+            async with httpx.AsyncClient(headers=self.headers, timeout=settings.TIMEOUT) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
                 
-                # Add source identifier
-                data["source"] = "ipinfo"
+                # Handle potential error responses
+                if "error" in data:
+                    return {"error": data.get("error", {}).get("title", "Unknown error")}
                 
                 return data
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching IP info: {e}")
-            return {"error": f"HTTP error: {e.response.status_code}"}
         except Exception as e:
-            logger.error(f"Error fetching IP info: {e}")
-            return {"error": str(e)}
+            error_msg = f"Error fetching IPinfo for {ip}: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
     
     async def fetch_hunter_email_info(self, domain_or_email: str) -> Dict[str, Any]:
         """
@@ -64,35 +69,35 @@ class APISources:
             Dictionary containing email information
         """
         if not self.hunter_api_key:
-            logger.warning("Hunter.io API key not set")
-            return {"error": "API key not configured"}
-        
-        # Determine if input is domain or email
-        is_email = '@' in domain_or_email
-        
-        if is_email:
-            url = f"https://api.hunter.io/v2/email-verifier?email={domain_or_email}&api_key={self.hunter_api_key}"
-        else:
-            url = f"https://api.hunter.io/v2/domain-search?domain={domain_or_email}&api_key={self.hunter_api_key}"
+            logger.warning("Hunter.io API key not set. Skipping Hunter.io lookup.")
+            return {"error": "Hunter.io API key not set"}
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # Determine if input is a domain or email
+            if "@" in domain_or_email:
+                # Email lookup
+                url = f"https://api.hunter.io/v2/email-verifier?email={domain_or_email}&api_key={self.hunter_api_key}"
+            else:
+                # Domain lookup
+                url = f"https://api.hunter.io/v2/domain-search?domain={domain_or_email}&api_key={self.hunter_api_key}"
+            
+            async with httpx.AsyncClient(headers=self.headers, timeout=settings.TIMEOUT) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
                 
-                # Add source identifier
-                result = data.get("data", {})
-                result["source"] = "hunter"
+                # Handle potential error responses
+                if "errors" in data:
+                    errors = data.get("errors", [])
+                    error_msg = errors[0].get("details") if errors else "Unknown error"
+                    return {"error": error_msg}
                 
-                return result
+                return data.get("data", {})
                 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching Hunter.io data: {e}")
-            return {"error": f"HTTP error: {e.response.status_code}"}
         except Exception as e:
-            logger.error(f"Error fetching Hunter.io data: {e}")
-            return {"error": str(e)}
+            error_msg = f"Error fetching Hunter.io data for {domain_or_email}: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
     
     async def fetch_haveibeenpwned(self, email_or_username: str) -> List[Dict[str, Any]]:
         """
@@ -105,48 +110,47 @@ class APISources:
             List of dictionaries containing breach information
         """
         if not self.hibp_api_key:
-            logger.warning("HaveIBeenPwned API key not set")
-            return [{"error": "API key not configured"}]
-        
-        # Determine if input is email
-        is_email = '@' in email_or_username
-        
-        if is_email:
-            url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{email_or_username}"
-        else:
-            url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{email_or_username}?truncateResponse=false"
-        
-        headers = {
-            "hibp-api-key": self.hibp_api_key,
-            "User-Agent": "OSINT-Microagent"
-        }
+            logger.warning("HaveIBeenPwned API key not set. Skipping HaveIBeenPwned lookup.")
+            return [{"error": "HaveIBeenPwned API key not set"}]
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url, headers=headers)
+            # Determine if input is an email (contains @)
+            lookup_url = "breachedaccount"
+            
+            # Construct the URL
+            url = f"https://haveibeenpwned.com/api/v3/{lookup_url}/{email_or_username}"
+            
+            # Add specific headers for HIBP
+            headers = {
+                **self.headers,
+                "hibp-api-key": self.hibp_api_key
+            }
+            
+            async with httpx.AsyncClient(headers=headers, timeout=settings.TIMEOUT) as client:
+                response = await client.get(url)
                 
+                # Check for specific status codes
                 if response.status_code == 404:
-                    # No breaches found
+                    # 404 means not found in any breaches
                     return []
                 
                 response.raise_for_status()
+                
+                # Parse the response
                 data = response.json()
-                
-                # Add source identifier to each breach
-                for breach in data:
-                    breach["source"] = "haveibeenpwned"
-                
                 return data
                 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching HaveIBeenPwned data: {e}")
             if e.response.status_code == 404:
-                # No breaches found is not an error
+                # 404 means not found in any breaches, which is not an error
                 return []
-            return [{"error": f"HTTP error: {e.response.status_code}"}]
+            error_msg = f"HTTP error fetching HaveIBeenPwned data for {email_or_username}: {str(e)}"
+            logger.error(error_msg)
+            return [{"error": error_msg}]
         except Exception as e:
-            logger.error(f"Error fetching HaveIBeenPwned data: {e}")
-            return [{"error": str(e)}]
+            error_msg = f"Error fetching HaveIBeenPwned data for {email_or_username}: {str(e)}"
+            logger.error(error_msg)
+            return [{"error": error_msg}]
     
     async def fetch_all(self, query_data: Dict[str, Any], sources: Dict[str, bool]) -> Dict[str, Any]:
         """
@@ -159,28 +163,36 @@ class APISources:
         Returns:
             Dictionary with source names as keys and API results as values
         """
-        tasks = []
         results = {}
         
+        # IP info lookup
         if sources.get("ipinfo", False) and "ip" in query_data:
-            tasks.append(self.fetch_ipinfo(query_data["ip"]))
-            sources_list = ["ipinfo"]
+            ip_info = await self.fetch_ipinfo(query_data["ip"])
+            if ip_info and not (len(ip_info) == 1 and "error" in ip_info):
+                results["ipinfo"] = ip_info
         
-        elif sources.get("hunter", False) and ("domain" in query_data or "email" in query_data):
-            query = query_data.get("domain", query_data.get("email", ""))
-            tasks.append(self.fetch_hunter_email_info(query))
-            sources_list = ["hunter"]
+        # Hunter.io lookup
+        if sources.get("hunter", False):
+            # Determine what to look up
+            if "domain" in query_data:
+                hunter_data = await self.fetch_hunter_email_info(query_data["domain"])
+                if hunter_data and not (len(hunter_data) == 1 and "error" in hunter_data):
+                    results["hunter"] = hunter_data
+            elif "email" in query_data:
+                hunter_data = await self.fetch_hunter_email_info(query_data["email"])
+                if hunter_data and not (len(hunter_data) == 1 and "error" in hunter_data):
+                    results["hunter"] = hunter_data
         
-        elif sources.get("haveibeenpwned", False) and ("email" in query_data or "username" in query_data):
-            query = query_data.get("email", query_data.get("username", ""))
-            tasks.append(self.fetch_haveibeenpwned(query))
-            sources_list = ["haveibeenpwned"]
-        
-        if tasks:
-            api_results = await asyncio.gather(*tasks)
-            
-            # Assign results to corresponding sources
-            for i, source in enumerate(sources_list):
-                results[source] = api_results[i]
+        # HaveIBeenPwned lookup
+        if sources.get("haveibeenpwned", False):
+            # Determine what to look up
+            if "email" in query_data:
+                hibp_data = await self.fetch_haveibeenpwned(query_data["email"])
+                if hibp_data and not (len(hibp_data) == 1 and "error" in hibp_data[0]):
+                    results["haveibeenpwned"] = hibp_data
+            elif "username" in query_data:
+                hibp_data = await self.fetch_haveibeenpwned(query_data["username"])
+                if hibp_data and not (len(hibp_data) == 1 and "error" in hibp_data[0]):
+                    results["haveibeenpwned"] = hibp_data
         
         return results

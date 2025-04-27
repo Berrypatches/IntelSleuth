@@ -1,7 +1,11 @@
-import sqlalchemy as sa
+"""
+OSINT Microagent - Database Models
+"""
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
 
+# Create a base class for declarative models
 Base = declarative_base()
 
 class OsintQuery(Base):
@@ -16,7 +20,7 @@ class OsintQuery(Base):
     timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
-        return f"<OsintQuery(id={self.id}, query='{self.query_text}', type='{self.query_type}')>"
+        return f"<OsintQuery(id={self.id}, query_text='{self.query_text}', query_type='{self.query_type}')>"
 
 class OsintResult(Base):
     """
@@ -32,7 +36,7 @@ class OsintResult(Base):
     timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
-        return f"<OsintResult(id={self.id}, query_id={self.query_id}, category='{self.category}')>"
+        return f"<OsintResult(id={self.id}, query_id={self.query_id}, category='{self.category}', source='{self.source}')>"
 
 def init_models(base, engine):
     """
@@ -42,5 +46,4 @@ def init_models(base, engine):
         base: SQLAlchemy declarative base
         engine: SQLAlchemy engine
     """
-    # Create tables if they don't exist
-    base.metadata.create_all(engine)
+    base.metadata.create_all(bind=engine)

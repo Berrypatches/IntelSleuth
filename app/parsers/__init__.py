@@ -1,1 +1,3 @@
-# This file makes the parsers directory a Python package
+"""
+OSINT Microagent - Parsers module
+"""

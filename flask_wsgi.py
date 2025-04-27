@@ -1,19 +1,14 @@
+"""
+WSGI entry point for Gunicorn with Flask
+"""
 import os
-from flask import Flask, redirect, request
+import sys
 
-# Create a Flask app for forwarding requests
-app = Flask(__name__)
+# Add the current directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def catch_all(path):
-    # Get the domain from request
-    host = request.headers.get('Host', 'localhost:5000')
-    domain = host.split(':')[0]
-    
-    # Forward to the same path on port 8000
-    return redirect(f"http://{domain}:8000/{path}")
+# Import the Flask application
+from flask_app import app
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+# Application entry point for Gunicorn
+application = app

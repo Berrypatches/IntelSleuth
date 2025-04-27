@@ -1,8 +1,10 @@
-# Import the flask app from main.py
-from main import flask_app
+"""
+Gunicorn configuration for Flask
+"""
+import multiprocessing
 
-# This is what gunicorn will import
-app = flask_app
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+# Gunicorn config
+bind = "0.0.0.0:5000"
+workers = 1
+reload = True
+wsgi_app = "flask_wsgi:application"

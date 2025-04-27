@@ -1,1 +1,3 @@
-# This file makes the handlers directory a Python package
+"""
+OSINT Microagent - Handlers module
+"""

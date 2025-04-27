@@ -1,7 +1,9 @@
-import logging
+"""
+OSINT Microagent - Result Parser
+"""
 import re
-from typing import Dict, List, Any, Set
-import json
+import logging
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -10,8 +12,7 @@ class ResultParser:
     Parses, filters and categorizes the raw results from various sources
     """
     
-    @staticmethod
-    def extract_emails(text: str) -> List[str]:
+    def extract_emails(self, text: str) -> List[str]:
         """
         Extracts email addresses from text
         
@@ -21,12 +22,11 @@ class ResultParser:
         Returns:
             List of extracted email addresses
         """
-        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-        emails = re.findall(email_pattern, text)
-        return list(set(emails))
+        # Email pattern
+        pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        return list(set(re.findall(pattern, text)))
     
-    @staticmethod
-    def extract_phone_numbers(text: str) -> List[str]:
+    def extract_phone_numbers(self, text: str) -> List[str]:
         """
         Extracts phone numbers from text
         
@@ -36,23 +36,21 @@ class ResultParser:
         Returns:
             List of extracted phone numbers
         """
-        # Pattern for phone numbers (various formats)
-        phone_pattern = r'(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})(?: *x(\d+))?'
-        phones = re.findall(phone_pattern, text)
+        # Phone number patterns (international format, US format, etc.)
+        patterns = [
+            r'\+\d{1,3}\s?[\(\)\-\d\s]{8,}',  # International format: +1 123-456-7890
+            r'\(\d{3}\)\s?\d{3}[-\s]?\d{4}',   # US format: (123) 456-7890
+            r'\d{3}[-\s]?\d{3}[-\s]?\d{4}'     # US format without parentheses: 123-456-7890
+        ]
         
-        # Format the extracted phone numbers
-        formatted_phones = []
-        for phone_parts in phones:
-            # Filter out empty parts and join
-            parts = [part for part in phone_parts if part]
-            if parts:
-                formatted_phone = '-'.join(parts)
-                formatted_phones.append(formatted_phone)
+        results = []
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            results.extend(matches)
         
-        return list(set(formatted_phones))
+        return list(set(results))
     
-    @staticmethod
-    def extract_social_links(text: str) -> List[str]:
+    def extract_social_links(self, text: str) -> List[str]:
         """
         Extracts social media links from text
         
@@ -62,13 +60,27 @@ class ResultParser:
         Returns:
             List of extracted social media links
         """
-        # Pattern for common social media URLs
-        social_pattern = r'https?://(?:www\.)?(?:facebook\.com|twitter\.com|linkedin\.com|instagram\.com|github\.com)/[a-zA-Z0-9_\-./]+'
-        social_links = re.findall(social_pattern, text)
+        # Social media domains
+        social_domains = [
+            'facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com',
+            'github.com', 'pinterest.com', 'youtube.com', 'tiktok.com',
+            'reddit.com', 'tumblr.com', 'snapchat.com', 'quora.com',
+            'medium.com', 'flickr.com', 'vimeo.com', 'soundcloud.com'
+        ]
+        
+        # URL pattern
+        url_pattern = r'https?://[^\s<>"\'()]+(?<![\.\?!,])'
+        urls = re.findall(url_pattern, text)
+        
+        # Filter for social media links
+        social_links = []
+        for url in urls:
+            if any(domain in url.lower() for domain in social_domains):
+                social_links.append(url)
+        
         return list(set(social_links))
     
-    @staticmethod
-    def extract_addresses(text: str) -> List[str]:
+    def extract_addresses(self, text: str) -> List[str]:
         """
         Extracts physical addresses from text (simplified version)
         
@@ -78,14 +90,27 @@ class ResultParser:
         Returns:
             List of extracted address candidates
         """
-        # This is a simplified pattern - real address extraction is complex
-        # and might require NLP or specialized libraries
-        address_pattern = r'\d+\s+[A-Za-z0-9\s,]+(?:Avenue|Ave|Street|St|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr)\.?(?:\s+[A-Za-z]+,\s+[A-Za-z]+\s+\d{5}(?:-\d{4})?)?'
-        addresses = re.findall(address_pattern, text, re.IGNORECASE)
-        return list(set(addresses))
+        # This is a simplified approach that looks for address-like patterns
+        # A full address parser would be much more complex
+        
+        # Look for lines containing address components
+        address_indicators = [
+            r'\d+\s+[A-Za-z0-9\s,]+(?:Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Plaza|Plz|Square|Sq)',
+            r'\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b',  # ZIP code pattern
+            r'\b(?:Suite|Apt|Apartment|Unit)\s+[A-Za-z0-9-]+\b'
+        ]
+        
+        candidates = []
+        lines = text.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if any(re.search(pattern, line, re.IGNORECASE) for pattern in address_indicators):
+                candidates.append(line)
+        
+        return list(set(candidates))
     
-    @staticmethod
-    def is_ad_or_irrelevant(text: str) -> bool:
+    def is_ad_or_irrelevant(self, text: str) -> bool:
         """
         Checks if text is likely an advertisement or irrelevant content
         
@@ -95,23 +120,21 @@ class ResultParser:
         Returns:
             Boolean indicating if text is likely an ad or irrelevant
         """
+        # Common ad and irrelevant content indicators
         ad_indicators = [
-            'sponsored', 'advertisement', 'ads', 'promoted',
-            'buy now', 'limited time offer', 'discount', 'sale',
-            'click here', 'sign up now', 'subscribe', 'free trial'
+            r'\b(?:ad|advertisement|sponsor)\b',
+            r'\b(?:click here|sign up|subscribe|free trial)\b',
+            r'\b(?:terms of service|privacy policy|cookie policy)\b',
+            r'\b(?:all rights reserved|copyright)\b'
         ]
         
-        lower_text = text.lower()
-        
-        # Check for ad indicators
-        for indicator in ad_indicators:
-            if indicator in lower_text:
+        for pattern in ad_indicators:
+            if re.search(pattern, text, re.IGNORECASE):
                 return True
         
         return False
     
-    @staticmethod
-    def remove_duplicates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def remove_duplicates(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Removes duplicate items based on content
         
@@ -121,24 +144,33 @@ class ResultParser:
         Returns:
             Deduplicated list of items
         """
-        unique_items = []
+        # Create a set of content signatures
         seen_content = set()
+        unique_items = []
         
         for item in items:
-            # Create a fingerprint of the item's core content
-            if "title" in item and "url" in item:
-                # For search results
-                fingerprint = f"{item['title']}|{item['url']}"
-            elif "name" in item and "email" in item:
-                # For contact info
-                fingerprint = f"{item['name']}|{item['email']}"
+            # Create a signature based on relevant fields
+            if "content" in item:
+                content = item["content"]
+                if isinstance(content, str):
+                    # For text content
+                    signature = content[:100]  # Use first 100 chars as signature
+                elif isinstance(content, list):
+                    # For list content
+                    signature = str(content)[:100]
+                else:
+                    # For other content types
+                    signature = str(item)[:100]
+                
+                if signature not in seen_content:
+                    seen_content.add(signature)
+                    unique_items.append(item)
             else:
-                # For other types, convert to JSON string
-                fingerprint = json.dumps(item, sort_keys=True)
-            
-            if fingerprint not in seen_content:
-                seen_content.add(fingerprint)
-                unique_items.append(item)
+                # If no content field, use the whole item as signature
+                signature = str(item)[:100]
+                if signature not in seen_content:
+                    seen_content.add(signature)
+                    unique_items.append(item)
         
         return unique_items
     
@@ -153,180 +185,265 @@ class ResultParser:
             Dictionary with categorized and filtered results
         """
         categorized = {
-            "emails": [],
-            "phone_numbers": [],
-            "social_links": [],
-            "addresses": [],
-            "business_info": [],
-            "leaks": [],
-            "raw_results": [],
-            "domains": [],
-            "ips": []
+            "contact_info": [],
+            "social_profiles": [],
+            "domain_info": [],
+            "breach_data": [],
+            "location_data": [],
+            "related_links": [],
+            "raw_data": []
         }
         
+        # Process WHOIS results
+        if "whois" in results:
+            whois_data = results["whois"]
+            
+            # Domain WHOIS
+            if "domain" in whois_data:
+                domain_data = whois_data["domain"]
+                
+                # Add to domain_info category
+                if "domain_name" in domain_data:
+                    categorized["domain_info"].append({
+                        "title": f"WHOIS Information for {domain_data.get('domain_name', 'Domain')}",
+                        "source": "WHOIS",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(domain_data)
+                    })
+                
+                # Extract registrant contact info
+                contact_info = {}
+                for key in ["registrant_name", "registrant_email", "registrant_phone", "registrant_organization"]:
+                    if key in domain_data and domain_data[key]:
+                        contact_info[key.replace("registrant_", "")] = domain_data[key]
+                
+                if contact_info:
+                    categorized["contact_info"].append({
+                        "title": "Domain Registrant Contact Information",
+                        "source": "WHOIS",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(contact_info)
+                    })
+            
+            # IP WHOIS
+            if "ip" in whois_data:
+                ip_data = whois_data["ip"]
+                
+                # Add to raw_data category
+                categorized["raw_data"].append({
+                    "title": f"WHOIS Information for IP {ip_data.get('ip', ip_data.get('query', 'IP'))}",
+                    "source": "WHOIS",
+                    "content_type": "pre",
+                    "content": self._format_dict_as_text(ip_data)
+                })
+                
+                # Extract location data
+                location_info = {}
+                for key in ["country", "city", "region", "address", "netname", "organization"]:
+                    if key in ip_data and ip_data[key]:
+                        location_info[key] = ip_data[key]
+                
+                if location_info:
+                    categorized["location_data"].append({
+                        "title": "IP Location Information",
+                        "source": "WHOIS",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(location_info)
+                    })
+        
         # Process search engine results
-        if "search_results" in results:
-            for source, items in results["search_results"].items():
-                for item in items:
-                    # Skip ads and irrelevant content
-                    if self.is_ad_or_irrelevant(item.get("title", "") + " " + item.get("snippet", "")):
-                        continue
+        if "search_engines" in results:
+            search_results = results["search_engines"]
+            
+            # Process DuckDuckGo results
+            if "duckduckgo" in search_results:
+                ddg_data = search_results["duckduckgo"]
+                links = []
+                
+                for result in ddg_data:
+                    # Add to related_links category
+                    links.append(f"{result['title']} - {result['url']}")
                     
-                    # Add to raw results
-                    categorized["raw_results"].append(item)
-                    
-                    # Extract various entities from snippet
-                    snippet = item.get("snippet", "")
-                    
-                    # Extract and add emails
-                    emails = self.extract_emails(snippet)
-                    for email in emails:
-                        categorized["emails"].append({
-                            "email": email,
-                            "source": item.get("source", "unknown"),
-                            "context": item.get("title", "")
+                    # Check if result might contain contact info
+                    if "contact" in result["title"].lower() or "contact" in result["snippet"].lower():
+                        categorized["contact_info"].append({
+                            "title": result["title"],
+                            "source": "DuckDuckGo",
+                            "content_type": "text",
+                            "content": f"{result['snippet']}\n\nLink: {result['url']}"
                         })
                     
-                    # Extract and add phone numbers
-                    phones = self.extract_phone_numbers(snippet)
-                    for phone in phones:
-                        categorized["phone_numbers"].append({
-                            "phone": phone,
-                            "source": item.get("source", "unknown"),
-                            "context": item.get("title", "")
+                    # Check if result might contain profile info
+                    if any(term in result["title"].lower() or term in result["snippet"].lower() 
+                           for term in ["profile", "linkedin", "facebook", "twitter", "social"]):
+                        categorized["social_profiles"].append({
+                            "title": result["title"],
+                            "source": "DuckDuckGo",
+                            "content_type": "text",
+                            "content": f"{result['snippet']}\n\nLink: {result['url']}"
+                        })
+                
+                if links:
+                    categorized["related_links"].append({
+                        "title": "Related Links from DuckDuckGo",
+                        "source": "DuckDuckGo",
+                        "content_type": "list",
+                        "content": links
+                    })
+            
+            # Process Bing results
+            if "bing" in search_results:
+                bing_data = search_results["bing"]
+                links = []
+                
+                for result in bing_data:
+                    # Add to related_links category
+                    links.append(f"{result['title']} - {result['url']}")
+                    
+                    # Check if result might contain contact info
+                    if "contact" in result["title"].lower() or "contact" in result["snippet"].lower():
+                        categorized["contact_info"].append({
+                            "title": result["title"],
+                            "source": "Bing",
+                            "content_type": "text",
+                            "content": f"{result['snippet']}\n\nLink: {result['url']}"
                         })
                     
-                    # Extract and add social links
-                    social = self.extract_social_links(snippet)
-                    for link in social:
-                        categorized["social_links"].append({
-                            "url": link,
-                            "source": item.get("source", "unknown"),
-                            "context": item.get("title", "")
+                    # Check if result might contain profile info
+                    if any(term in result["title"].lower() or term in result["snippet"].lower() 
+                           for term in ["profile", "linkedin", "facebook", "twitter", "social"]):
+                        categorized["social_profiles"].append({
+                            "title": result["title"],
+                            "source": "Bing",
+                            "content_type": "text",
+                            "content": f"{result['snippet']}\n\nLink: {result['url']}"
                         })
-                    
-                    # Extract and add addresses
-                    addresses = self.extract_addresses(snippet)
-                    for address in addresses:
-                        categorized["addresses"].append({
-                            "address": address,
-                            "source": item.get("source", "unknown"),
-                            "context": item.get("title", "")
-                        })
+                
+                if links:
+                    categorized["related_links"].append({
+                        "title": "Related Links from Bing",
+                        "source": "Bing",
+                        "content_type": "list",
+                        "content": links
+                    })
         
         # Process API results
-        if "api_results" in results:
+        if "api_sources" in results:
+            api_results = results["api_sources"]
+            
             # Process IPinfo results
-            if "ipinfo" in results["api_results"]:
-                ipinfo = results["api_results"]["ipinfo"]
-                if "error" not in ipinfo:
-                    categorized["ips"].append({
-                        "ip": ipinfo.get("ip", ""),
-                        "hostname": ipinfo.get("hostname", ""),
-                        "city": ipinfo.get("city", ""),
-                        "region": ipinfo.get("region", ""),
-                        "country": ipinfo.get("country", ""),
-                        "loc": ipinfo.get("loc", ""),
-                        "org": ipinfo.get("org", ""),
-                        "postal": ipinfo.get("postal", ""),
-                        "timezone": ipinfo.get("timezone", ""),
-                        "source": "ipinfo"
+            if "ipinfo" in api_results:
+                ipinfo_data = api_results["ipinfo"]
+                
+                # Add location data
+                location_info = {}
+                for key in ["ip", "hostname", "city", "region", "country", "loc", "org", "postal", "timezone"]:
+                    if key in ipinfo_data and ipinfo_data[key]:
+                        location_info[key] = ipinfo_data[key]
+                
+                if location_info:
+                    categorized["location_data"].append({
+                        "title": f"IP Location Information for {ipinfo_data.get('ip', 'IP')}",
+                        "source": "IPinfo.io",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(location_info)
                     })
-                    
-                    # Add business info if organization is present
-                    if "org" in ipinfo and ipinfo["org"]:
-                        categorized["business_info"].append({
-                            "name": ipinfo["org"],
-                            "source": "ipinfo",
-                            "type": "hosting_provider"
-                        })
             
             # Process Hunter.io results
-            if "hunter" in results["api_results"]:
-                hunter = results["api_results"]["hunter"]
-                if "error" not in hunter:
-                    # For domain search results
-                    if "emails" in hunter:
-                        for email in hunter.get("emails", []):
-                            categorized["emails"].append({
-                                "email": email.get("value", ""),
-                                "name": f"{email.get('first_name', '')} {email.get('last_name', '')}".strip(),
-                                "position": email.get("position", ""),
-                                "confidence": email.get("confidence", 0),
-                                "source": "hunter"
-                            })
-                        
-                        # Add domain info
-                        if "domain" in hunter:
-                            categorized["domains"].append({
-                                "domain": hunter["domain"],
-                                "organization": hunter.get("organization", ""),
-                                "source": "hunter"
-                            })
-                        
-                        # Add business info if organization is present
-                        if "organization" in hunter and hunter["organization"]:
-                            categorized["business_info"].append({
-                                "name": hunter["organization"],
-                                "domain": hunter.get("domain", ""),
-                                "email_pattern": hunter.get("pattern", ""),
-                                "source": "hunter"
-                            })
+            if "hunter" in api_results:
+                hunter_data = api_results["hunter"]
+                
+                # Process domain data
+                if "domain" in hunter_data:
+                    domain_info = {
+                        "domain": hunter_data["domain"],
+                        "disposable": hunter_data.get("disposable", False),
+                        "webmail": hunter_data.get("webmail", False),
+                        "pattern": hunter_data.get("pattern", None)
+                    }
                     
-                    # For email verification results
-                    elif "email" in hunter:
-                        categorized["emails"].append({
-                            "email": hunter["email"],
-                            "name": f"{hunter.get('first_name', '')} {hunter.get('last_name', '')}".strip(),
-                            "score": hunter.get("score", 0),
-                            "status": hunter.get("status", ""),
-                            "source": "hunter"
+                    categorized["domain_info"].append({
+                        "title": f"Domain Information for {hunter_data['domain']}",
+                        "source": "Hunter.io",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(domain_info)
+                    })
+                
+                # Process email verification data
+                if "email" in hunter_data:
+                    email_info = {
+                        "email": hunter_data["email"],
+                        "status": hunter_data.get("status", "unknown"),
+                        "disposable": hunter_data.get("disposable", False),
+                        "webmail": hunter_data.get("webmail", False),
+                        "sources": len(hunter_data.get("sources", []))
+                    }
+                    
+                    categorized["contact_info"].append({
+                        "title": f"Email Information for {hunter_data['email']}",
+                        "source": "Hunter.io",
+                        "content_type": "pre",
+                        "content": self._format_dict_as_text(email_info)
+                    })
+                
+                # Process found emails
+                if "emails" in hunter_data and hunter_data["emails"]:
+                    emails = []
+                    for email_entry in hunter_data["emails"]:
+                        if "value" in email_entry:
+                            email_line = f"{email_entry['value']}"
+                            if "first_name" in email_entry and "last_name" in email_entry:
+                                email_line += f" - {email_entry['first_name']} {email_entry['last_name']}"
+                            if "position" in email_entry:
+                                email_line += f" ({email_entry['position']})"
+                            emails.append(email_line)
+                    
+                    if emails:
+                        categorized["contact_info"].append({
+                            "title": f"Email Addresses Found for {hunter_data.get('domain', 'Domain')}",
+                            "source": "Hunter.io",
+                            "content_type": "list",
+                            "content": emails
                         })
             
             # Process HaveIBeenPwned results
-            if "haveibeenpwned" in results["api_results"]:
-                hibp = results["api_results"]["haveibeenpwned"]
-                for breach in hibp:
-                    if "error" not in breach:
-                        categorized["leaks"].append({
-                            "name": breach.get("Name", ""),
-                            "title": breach.get("Title", ""),
-                            "domain": breach.get("Domain", ""),
-                            "breach_date": breach.get("BreachDate", ""),
-                            "description": breach.get("Description", ""),
-                            "data_classes": breach.get("DataClasses", []),
-                            "source": "haveibeenpwned"
-                        })
-        
-        # Process WHOIS results
-        if "whois_results" in results and "whois" in results["whois_results"]:
-            whois_data = results["whois_results"]["whois"]
-            if "error" not in whois_data:
-                # For domain WHOIS
-                if "domain_name" in whois_data:
-                    categorized["domains"].append({
-                        "domain": whois_data.get("domain_name", ""),
-                        "registrar": whois_data.get("registrar", ""),
-                        "creation_date": whois_data.get("creation_date", ""),
-                        "expiration_date": whois_data.get("expiration_date", ""),
-                        "name_servers": whois_data.get("name_servers", []),
-                        "source": "whois"
-                    })
-                    
-                    # Add emails from WHOIS if present
-                    for email in whois_data.get("emails", []):
-                        categorized["emails"].append({
-                            "email": email,
-                            "relation": "domain registrant or admin",
-                            "source": "whois"
-                        })
+            if "haveibeenpwned" in api_results:
+                hibp_data = api_results["haveibeenpwned"]
                 
-                # For IP WHOIS
-                elif "ip" in whois_data:
-                    categorized["ips"].append({
-                        "ip": whois_data.get("ip", ""),
-                        "hostname": whois_data.get("hostname", ""),
-                        "source": "whois"
+                breaches = []
+                for breach in hibp_data:
+                    breach_info = {
+                        "name": breach.get("Name", "Unknown"),
+                        "title": breach.get("Title", "Unknown"),
+                        "domain": breach.get("Domain", "Unknown"),
+                        "breach_date": breach.get("BreachDate", "Unknown"),
+                        "added_date": breach.get("AddedDate", "Unknown"),
+                        "modified_date": breach.get("ModifiedDate", "Unknown"),
+                        "pwn_count": breach.get("PwnCount", 0),
+                        "description": breach.get("Description", "No description available"),
+                        "data_classes": ", ".join(breach.get("DataClasses", []))
+                    }
+                    
+                    breaches.append(breach_info)
+                
+                if breaches:
+                    # Format each breach
+                    breach_texts = []
+                    for breach in breaches:
+                        breach_text = f"Name: {breach['name']}\n"
+                        breach_text += f"Title: {breach['title']}\n"
+                        breach_text += f"Domain: {breach['domain']}\n"
+                        breach_text += f"Breach Date: {breach['breach_date']}\n"
+                        breach_text += f"Records Exposed: {breach['pwn_count']}\n"
+                        breach_text += f"Data Compromised: {breach['data_classes']}\n"
+                        breach_text += f"Description: {breach['description']}"
+                        breach_texts.append(breach_text)
+                    
+                    categorized["breach_data"].append({
+                        "title": f"Data Breaches ({len(breaches)} found)",
+                        "source": "Have I Been Pwned",
+                        "content_type": "list",
+                        "content": breach_texts
                     })
         
         # Remove duplicates from each category
@@ -345,164 +462,75 @@ class ResultParser:
         Returns:
             String containing the executive summary
         """
-        summary_lines = ["# Executive Summary"]
+        summary_lines = []
         
-        # Add email findings
-        emails = categorized_results.get("emails", [])
-        if emails:
-            summary_lines.append(f"\n## Emails ({len(emails)} found)")
-            for email in emails[:5]:  # Limit to top 5 for summary
-                email_str = email.get("email", "")
-                name = email.get("name", "")
-                position = email.get("position", "")
-                
-                email_info = f"* {email_str}"
-                if name:
-                    email_info += f" - {name}"
-                if position:
-                    email_info += f" ({position})"
-                
-                summary_lines.append(email_info)
+        # Count items in each category
+        contact_count = len(categorized_results.get("contact_info", []))
+        social_count = len(categorized_results.get("social_profiles", []))
+        domain_count = len(categorized_results.get("domain_info", []))
+        breach_count = len(categorized_results.get("breach_data", []))
+        location_count = len(categorized_results.get("location_data", []))
+        links_count = len(categorized_results.get("related_links", []))
+        
+        # Create summary based on found information
+        if contact_count > 0:
+            summary_lines.append(f"• Found <b>{contact_count}</b> contact information items")
+        
+        if social_count > 0:
+            summary_lines.append(f"• Identified <b>{social_count}</b> social profile references")
+        
+        if domain_count > 0:
+            summary_lines.append(f"• Collected <b>{domain_count}</b> domain information records")
+        
+        if breach_count > 0:
+            summary_lines.append(f"• Discovered <b>{breach_count}</b> data breach records")
+        
+        if location_count > 0:
+            summary_lines.append(f"• Located <b>{location_count}</b> geographical location references")
+        
+        if links_count > 0:
+            related_links_count = sum(len(item.get("content", [])) for item in categorized_results.get("related_links", []) if isinstance(item.get("content"), list))
+            summary_lines.append(f"• Found <b>{related_links_count}</b> related links from search engines")
+        
+        # If no information found
+        if not summary_lines:
+            summary_lines.append("• No significant information found for the provided query")
+            summary_lines.append("• Consider trying a different query or enabling additional data sources")
+        
+        return "<br>".join(summary_lines)
+    
+    def _format_dict_as_text(self, data: Dict[str, Any]) -> str:
+        """
+        Formats a dictionary as readable text
+        
+        Args:
+            data: Dictionary to format
             
-            if len(emails) > 5:
-                summary_lines.append(f"* ... and {len(emails) - 5} more")
-        
-        # Add phone findings
-        phones = categorized_results.get("phone_numbers", [])
-        if phones:
-            summary_lines.append(f"\n## Phone Numbers ({len(phones)} found)")
-            for phone in phones[:5]:  # Limit to top 5 for summary
-                phone_str = phone.get("phone", "")
-                context = phone.get("context", "")
-                
-                phone_info = f"* {phone_str}"
-                if context:
-                    phone_info += f" - {context}"
-                
-                summary_lines.append(phone_info)
+        Returns:
+            Formatted text representation
+        """
+        lines = []
+        for key, value in data.items():
+            # Format key for display
+            display_key = key.replace("_", " ").title()
             
-            if len(phones) > 5:
-                summary_lines.append(f"* ... and {len(phones) - 5} more")
+            # Format value based on type
+            if isinstance(value, list):
+                if value and isinstance(value[0], dict):
+                    # List of dictionaries
+                    lines.append(f"{display_key}:")
+                    for item in value:
+                        lines.append("  - " + self._format_dict_as_text(item).replace("\n", "\n    "))
+                else:
+                    # Simple list
+                    lines.append(f"{display_key}: {', '.join(str(item) for item in value)}")
+            elif isinstance(value, dict):
+                # Dictionary
+                lines.append(f"{display_key}:")
+                nested_text = self._format_dict_as_text(value)
+                lines.append("  " + nested_text.replace("\n", "\n  "))
+            else:
+                # Simple value
+                lines.append(f"{display_key}: {value}")
         
-        # Add social findings
-        socials = categorized_results.get("social_links", [])
-        if socials:
-            summary_lines.append(f"\n## Social Media ({len(socials)} found)")
-            for social in socials[:5]:  # Limit to top 5 for summary
-                url = social.get("url", "")
-                # Extract platform name from URL
-                platform = "Unknown"
-                if "facebook.com" in url:
-                    platform = "Facebook"
-                elif "twitter.com" in url:
-                    platform = "Twitter"
-                elif "linkedin.com" in url:
-                    platform = "LinkedIn"
-                elif "instagram.com" in url:
-                    platform = "Instagram"
-                elif "github.com" in url:
-                    platform = "GitHub"
-                
-                summary_lines.append(f"* {platform}: {url}")
-            
-            if len(socials) > 5:
-                summary_lines.append(f"* ... and {len(socials) - 5} more")
-        
-        # Add domain findings
-        domains = categorized_results.get("domains", [])
-        if domains:
-            summary_lines.append(f"\n## Domains ({len(domains)} found)")
-            for domain in domains[:5]:  # Limit to top 5 for summary
-                domain_str = domain.get("domain", "")
-                if isinstance(domain_str, list):
-                    domain_str = domain_str[0]  # Use first domain if it's a list
-                
-                registrar = domain.get("registrar", "")
-                creation = domain.get("creation_date", "")
-                
-                domain_info = f"* {domain_str}"
-                if registrar:
-                    domain_info += f" - Registrar: {registrar}"
-                if creation and not isinstance(creation, list):
-                    domain_info += f" - Created: {creation}"
-                
-                summary_lines.append(domain_info)
-        
-        # Add IP findings
-        ips = categorized_results.get("ips", [])
-        if ips:
-            summary_lines.append(f"\n## IP Addresses ({len(ips)} found)")
-            for ip in ips[:5]:  # Limit to top 5 for summary
-                ip_str = ip.get("ip", "")
-                org = ip.get("org", "")
-                location = ""
-                
-                if ip.get("city") and ip.get("country"):
-                    location = f"{ip.get('city')}, {ip.get('country')}"
-                
-                ip_info = f"* {ip_str}"
-                if location:
-                    ip_info += f" - Location: {location}"
-                if org:
-                    ip_info += f" - Organization: {org}"
-                
-                summary_lines.append(ip_info)
-        
-        # Add leak findings
-        leaks = categorized_results.get("leaks", [])
-        if leaks:
-            summary_lines.append(f"\n## Data Breaches ({len(leaks)} found)")
-            for leak in leaks[:5]:  # Limit to top 5 for summary
-                name = leak.get("name", "")
-                date = leak.get("breach_date", "")
-                classes = leak.get("data_classes", [])
-                
-                leak_info = f"* {name}"
-                if date:
-                    leak_info += f" ({date})"
-                if classes:
-                    leak_info += f" - Data exposed: {', '.join(classes[:3])}"
-                    if len(classes) > 3:
-                        leak_info += f" and {len(classes) - 3} more"
-                
-                summary_lines.append(leak_info)
-            
-            if len(leaks) > 5:
-                summary_lines.append(f"* ... and {len(leaks) - 5} more")
-        
-        # Add business findings
-        businesses = categorized_results.get("business_info", [])
-        if businesses:
-            summary_lines.append(f"\n## Business Information ({len(businesses)} found)")
-            for business in businesses[:5]:  # Limit to top 5 for summary
-                name = business.get("name", "")
-                domain = business.get("domain", "")
-                
-                business_info = f"* {name}"
-                if domain:
-                    business_info += f" - Domain: {domain}"
-                
-                summary_lines.append(business_info)
-        
-        # Add address findings
-        addresses = categorized_results.get("addresses", [])
-        if addresses:
-            summary_lines.append(f"\n## Addresses ({len(addresses)} found)")
-            for address in addresses[:5]:  # Limit to top 5 for summary
-                addr = address.get("address", "")
-                context = address.get("context", "")
-                
-                address_info = f"* {addr}"
-                if context:
-                    address_info += f" - Context: {context}"
-                
-                summary_lines.append(address_info)
-            
-            if len(addresses) > 5:
-                summary_lines.append(f"* ... and {len(addresses) - 5} more")
-        
-        # If no findings
-        if len(summary_lines) <= 1:
-            summary_lines.append("\nNo significant findings.")
-        
-        return "\n".join(summary_lines)
+        return "\n".join(lines)

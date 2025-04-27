@@ -1,91 +1,114 @@
+"""
+OSINT Microagent - Web Content Scraper
+"""
 import logging
-import asyncio
 from typing import Dict, Any, Optional
+import httpx
 import trafilatura
+from bs4 import BeautifulSoup
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 class WebContentScraper:
     """
-    Handles extracting text content from web pages using trafilatura
+    Handles the scraping of web content from URLs
     """
+    
+    def __init__(self):
+        """
+        Initialize the web content scraper
+        """
+        self.headers = {
+            "User-Agent": settings.USER_AGENT
+        }
     
     async def extract_text_from_url(self, url: str) -> Dict[str, Any]:
         """
-        Extracts the main text content from a webpage
+        Extracts the text content from a URL
         
         Args:
-            url: The URL to extract content from
+            url: The URL to extract text from
             
         Returns:
-            Dictionary containing extracted text and metadata
+            Dictionary containing extracted content
         """
-        logger.debug(f"Extracting content from URL: {url}")
-        
         try:
-            # Run in a separate thread to not block the event loop
-            loop = asyncio.get_event_loop()
-            
-            # Fetch the URL and extract content
-            downloaded = await loop.run_in_executor(None, lambda: trafilatura.fetch_url(url))
-            
+            # Download content
+            downloaded = await self.fetch_url(url)
             if not downloaded:
-                logger.warning(f"Failed to download content from {url}")
-                return {
-                    "url": url,
-                    "error": "Failed to download content",
-                    "content": "",
-                    "source": "web_scraper"
-                }
+                return {"error": "Failed to download content", "url": url}
             
-            # Extract text content
-            text = await loop.run_in_executor(None, lambda: trafilatura.extract(downloaded))
+            # Extract text using trafilatura (high quality content extraction)
+            text = trafilatura.extract(downloaded)
             
-            # Extract metadata if possible
-            metadata = await loop.run_in_executor(None, lambda: trafilatura.extract_metadata(downloaded))
+            # If trafilatura fails, fallback to BeautifulSoup
+            if not text:
+                soup = BeautifulSoup(downloaded, "html.parser")
+                
+                # Remove script and style elements
+                for script in soup(["script", "style"]):
+                    script.extract()
+                
+                # Extract text
+                text = soup.get_text(separator=" ")
+                
+                # Clean up text
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = "\\n".join(chunk for chunk in chunks if chunk)
             
-            result = {
-                "url": url,
-                "content": text if text else "",
-                "source": "web_scraper"
-            }
+            # Extract title
+            title = self._extract_title(downloaded)
             
-            # Add metadata if available
-            if metadata:
-                for key in ["title", "author", "date", "description", "sitename"]:
-                    if key in metadata and metadata[key]:
-                        result[key] = metadata[key]
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error extracting content from {url}: {e}")
             return {
                 "url": url,
-                "error": str(e),
-                "content": "",
-                "source": "web_scraper"
+                "title": title,
+                "text": text
+            }
+            
+        except Exception as e:
+            logger.error(f"Error extracting text from {url}: {str(e)}")
+            return {
+                "error": f"Error extracting text: {str(e)}",
+                "url": url
             }
     
-    async def process_urls(self, urls: list, max_urls: int = 5) -> Dict[str, Any]:
+    async def fetch_url(self, url: str) -> Optional[str]:
         """
-        Process multiple URLs and extract their content
+        Fetches the content of a URL
         
         Args:
-            urls: List of URLs to process
-            max_urls: Maximum number of URLs to process
+            url: The URL to fetch
             
         Returns:
-            Dictionary with URL as key and extracted content as value
+            HTML content as string or None if failed
         """
-        results = {}
+        try:
+            async with httpx.AsyncClient(headers=self.headers, timeout=settings.TIMEOUT) as client:
+                response = await client.get(url, follow_redirects=True)
+                response.raise_for_status()
+                return response.text
+        except Exception as e:
+            logger.error(f"Error fetching {url}: {str(e)}")
+            return None
+    
+    def _extract_title(self, html: str) -> Optional[str]:
+        """
+        Extracts the title from HTML content
         
-        # Limit the number of URLs to process
-        for url in urls[:max_urls]:
-            result = await self.extract_text_from_url(url)
-            results[url] = result
-        
-        return {
-            "web_content": results,
-            "source": "web_scraper"
-        }
+        Args:
+            html: HTML content
+            
+        Returns:
+            Title string or None if not found
+        """
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            title_tag = soup.find("title")
+            if title_tag:
+                return title_tag.string.strip()
+            return None
+        except Exception:
+            return None

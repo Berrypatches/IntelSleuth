@@ -1,13 +1,14 @@
-from flask import Flask, redirect, request
+"""
+WSGI entry point for Gunicorn
+This is a wrapper to allow Gunicorn to work with FastAPI through uvicorn.
+"""
+import os
+import sys
+import uvicorn
 
-app = Flask(__name__)
+# Add the current directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def catch_all(path):
-    # Get the domain from request
-    host = request.headers.get('Host', 'localhost:5000')
-    domain = host.split(':')[0]
-    
-    # Forward to the same path on port 8000
-    return redirect(f"http://{domain}:8000/{path}")
+# Gunicorn will look for 'application' variable
+from main import app
+application = app
