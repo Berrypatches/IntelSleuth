@@ -6,3 +6,4 @@ httpx
 pydantic
 python-multipart
 python-whois
+sqlalchemy
