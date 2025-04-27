@@ -1,15 +1,13 @@
-from app import create_app
-import uvicorn
+from flask import Flask, redirect, request
 
-# Create FastAPI app instance
-app = create_app()
+app = Flask(__name__)
 
-# For Gunicorn compatibility, use Uvicorn's WSGI adapter
-from uvicorn.middleware.wsgi import WSGIMiddleware
-
-# Wrap the FastAPI app with WSGIMiddleware to make it compatible with WSGI servers
-wsgi_app = WSGIMiddleware(app)
-
-# For direct execution
-if __name__ == "__main__":
-    uvicorn.run("wsgi:app", host="0.0.0.0", port=5000, reload=True)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    # Get the domain from request
+    host = request.headers.get('Host', 'localhost:5000')
+    domain = host.split(':')[0]
+    
+    # Forward to the same path on port 8000
+    return redirect(f"http://{domain}:8000/{path}")
