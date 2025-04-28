@@ -124,6 +124,8 @@ class InputHandler:
             "ipinfo": False,
             "hunter": False,
             "haveibeenpwned": False
+            "pipl": True,
+            "pdl": True
         }
         
         # Enable sources based on input type
